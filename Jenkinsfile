@@ -32,10 +32,10 @@ pipeline {
         ]) {
             sh '''
             echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-            docker build -t jinny1/movie-streaming-backend-nodejs:latest .
-            docker push jinny1/movie-streaming-backend-nodejs:latest
-            docker build -t jinny1/movie-streaming-frontend:latest ./html
-            docker push jinny1/movie-streaming-frontend:latest
+            docker build -t venuagurla/movie-streaming-backend-nodejs:latest .
+            docker push venuagurla/movie-streaming-backend-nodejs:latest
+            docker build -t venuagurla/movie-streaming-frontend:latest ./html
+            docker push venuagurla/movie-streaming-frontend:latest
             docker logout
             '''
         }
