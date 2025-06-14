@@ -10,12 +10,24 @@ pipeline {
     stage('Unit Tests') {
       steps {
         sh '''
-          curl -sL https://rpm.nodesource.com/setup_16.x | bash -
+          curl -sL https://rpm.nodesource.com/setup_18.x | bash -
           yum install -y nodejs
+          npm install
           npm test
         '''
       }
     }
+    stage('Unit Tests') {
+      steps {
+        sh '''
+          curl -sL https://rpm.nodesource.com/setup_18.x | bash -
+          yum install -y nodejs
+          npm install
+          npm test
+        '''
+      }
+    }
+
     stage('Docker Build and Push') {
     steps {
         withCredentials([
