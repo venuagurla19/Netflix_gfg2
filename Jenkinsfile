@@ -1,99 +1,83 @@
 pipeline {
-  agent any
-
-  environment {
-    DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials') // ID containing username/password
-    DB_PASSWORD = credentials('db-password') // DB password from Jenkins credentials
-    DB_HOST = 'database-1.ctsgs6ymgs9r.ap-south-1.rds.amazonaws.com'
-  }
+  agent { label 'ec2' }
 
   stages {
     stage('Checkout') {
       steps {
-        checkout scm
+        git branch: 'dev', url: 'https://github.com/venuagurla19/Netflix_gfg2.git'
       }
     }
-
     stage('Unit Tests') {
       steps {
         sh '''
-          # Install Node.js properly using NodeSource
-          curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
           yum install -y nodejs
-          node -v
           npm install
           npm test
         '''
       }
     }
-
     stage('Docker Build and Push') {
-      steps {
-        script {
-          docker.withRegistry('https://index.docker.io/v1/', 'dockerhub-credentials') {
-            def backendImage = docker.build("${DOCKERHUB_CREDENTIALS_USR}/node-backend", 'node-backend')
-            def frontendImage = docker.build("${DOCKERHUB_CREDENTIALS_USR}/node-frontend", 'html')
-
-            backendImage.push("latest")
-            frontendImage.push("latest")
-          }
+    steps {
+        withCredentials([
+        string(credentialsId: 'dockerhub-username', variable: 'DOCKERHUB_USERNAME'),
+        string(credentialsId: 'dockerhub-token', variable: 'DOCKERHUB_PASSWORD')
+        ]) {
+        withEnv([
+            'DOCKERHUB_USERNAME=' + env.DOCKERHUB_USERNAME,
+            'DOCKERHUB_PASSWORD=' + env.DOCKERHUB_PASSWORD
+        ]) {
+            sh '''
+            echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            docker build -t jinny1/movie-streaming-backend-nodejs:latest .
+            docker push jinny1/movie-streaming-backend-nodejs:latest
+            docker build -t jinny1/movie-streaming-frontend:latest ./html
+            docker push jinny1/movie-streaming-frontend:latest
+            docker logout
+            '''
         }
-      }
+        }
+    }
     }
 
-    stage('Deploy to Kubernetes') {
-      steps {
+  stage('Deploy to Kubernetes') {
+  steps {
+    withCredentials([
+      string(credentialsId: 'db-password', variable: 'DB_PASSWORD'),
+      string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
+      string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
+    ]) {
         sh '''
-          kubectl apply -f deploy/backend-configmap.yaml
-          kubectl apply -f deploy/backend-secret.yaml
-          kubectl apply -f deploy/backend-deployment.yaml
-          kubectl apply -f deploy/backend-service.yaml
+          kubectl delete secret app-secrets --ignore-not-found
+          kubectl create secret generic app-secrets \
+            --from-literal=DB_PASSWORD="$DB_PASSWORD" \
+            --from-literal=AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+            --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
         '''
-      }
-    }
-
-    stage('Update Frontend Config') {
-      steps {
+        sh "kubectl apply -f deploy/configmap.yaml"
+        sh "kubectl apply -f deploy/deployment-node-app.yaml"
+        sh "kubectl apply -f deploy/service-node-app.yaml"
+        sh "sleep 30"
         script {
           def apiUrl = sh(
             script: "kubectl get svc node-app-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'",
             returnStdout: true
           ).trim()
 
-          echo "Backend API URL: ${apiUrl}"
-
-          // Replace placeholder and apply config
-          sh "sed 's|\\\${API_URL}|${apiUrl}|g' deploy/webapp-config.yaml > updated-webapp.yaml"
-          sh 'kubectl apply -f updated-webapp.yaml'
+          sh """
+            sed 's|\\\${API_URL}|${apiUrl}|g' deploy/webapp-config.yaml | kubectl apply -f -
+          """
         }
-      }
+        sh "kubectl apply -f deploy/deployment-web.yaml"
+        sh "kubectl apply -f deploy/service-web.yaml"
     }
+  }
+}
 
-    stage('Deploy Frontend') {
-      steps {
-        sh '''
-          kubectl apply -f deploy/webapp-deployment.yaml
-          kubectl apply -f deploy/webapp-service.yaml
-        '''
-      }
-    }
 
     stage('Verify Deployment') {
       steps {
-        sh '''
-          echo "Verifying pod status..."
-          kubectl get pods
-        '''
-      }
-    }
-  }
-
-  post {
-    success {
-      echo '✅ Pipeline completed successfully.'
-    }
-    failure {
-      echo '❌ Pipeline failed. Please check the logs above.'
+          sh "kubectl get svc"
+        }
     }
   }
 }
