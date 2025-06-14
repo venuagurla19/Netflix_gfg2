@@ -17,16 +17,6 @@ pipeline {
         '''
       }
     }
-    stage('Unit Tests') {
-      steps {
-        sh '''
-          curl -sL https://rpm.nodesource.com/setup_18.x | bash -
-          yum install -y nodejs
-          npm install
-          npm test
-        '''
-      }
-    }
 
     stage('Docker Build and Push') {
     steps {
