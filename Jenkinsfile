@@ -10,10 +10,12 @@ pipeline {
     stage('Unit Tests') {
       steps {
         sh '''
-          curl -sL https://rpm.nodesource.com/setup_18.x | bash -
-          yum install -y nodejs
-          npm install
-          npm test
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+          export NVM_DIR="$HOME/.nvm"
+          . "$NVM_DIR/nvm.sh"
+          nvm install 16
+          nvm use 16
+
         '''
       }
     }
